@@ -142,7 +142,8 @@ void OnTimer()
 
 	 }
 	 string CRIs = "CRI ";
-	int min,max;
+	int min = 0;
+	int max = 0;
 	string currenciesHeader = "----------";
 	for (i = 0;   i < cpairsLen; i++){
 		if(CRI[i] < CRI[min]) min = i;
