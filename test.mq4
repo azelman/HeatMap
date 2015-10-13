@@ -8,18 +8,24 @@
 #property version   "1.00"
 #property strict
 
-extern string Currencies   = "EUR;GBP;AUD;NZD;USD;CAD;CHF;JPY";
+//extern string Currencies   = "EUR;GBP;AUD;NZD;USD;CAD;CHF;JPY";
 //extern string Currencies   = "JPY;CHF;CAD;USD;NZD;AUD;GBP;EUR";
 
 int lastHour = 0;
 int    cpairsLen;
 int    ctimesLen;
-string cpairs[];
-int    aTime = PERIOD_H4;
+string cpairs[8];
+
 int CRI[8];
 string addition  = "";
 string FontToUse = "Terminal";
 string lastSymbol;
+double lastH4Price = 0;
+
+input int aTime    = PERIOD_M1;
+input double TakeProfit    = 100;
+input double Lots          = 0.01;
+input double TrailingStop  = 100;
 
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
@@ -27,26 +33,22 @@ string lastSymbol;
 int OnInit()
 	{
 //--- create timer
-	 EventSetTimer(100);
+	 EventSetTimer(60);
 //---
-
-	 if (StringSubstr(Currencies,StringLen(Currencies),1) != ";")
-										Currencies = StringConcatenate(Currencies,";");
-
-			int  s      = 0;
-			int  i      = StringFind(Currencies,";",s);
-			string current;
-			while (i > 0)
-			{
-				current = StringSubstr(Currencies,s,i-s);
-				ArrayResize(cpairs,ArraySize(cpairs)+1);
-				printf("Init - Parsing currencies: " + ArraySize(cpairs) + " " + current));
-				cpairs[ArraySize(cpairs)-1] = current;
-				s = i + 1;
-				i = StringFind(Currencies,";",s);
-			}
-			cpairsLen = ArraySize(cpairs);
-
+   
+   cpairs[0] = "EUR";
+   cpairs[1] = "GBP";
+   cpairs[2] = "AUD";
+   cpairs[3] = "NZD";
+   cpairs[4] = "USD";
+   cpairs[5] = "CAD";
+   cpairs[6] = "CHF";
+   cpairs[7] = "JPY";
+   
+	cpairsLen = ArraySize(cpairs);
+   
+   lastH4Price = iClose("EURUSD",aTime,1);
+	 
 	 return(INIT_SUCCEEDED);
 	}
 //+------------------------------------------------------------------+
@@ -72,10 +74,12 @@ void OnTick()
 void OnTimer()
 	{
 //---
+   double currentH4Price = iClose("EURUSD",aTime,0);
+   if(lastH4Price == currentH4Price){
+      return;
+   }
+
 	int currentHour = Hour();
-	if(currentHour == lastHour || currentHour % 4 != 0) {
-	 return;
-	}
 
 	printf("Current hour ------------------------------------------- " + currentHour);
 
@@ -86,15 +90,15 @@ void OnTimer()
 			{
 	
 				string symbol = cpairs[i]+cpairs[k]+addition;				
-				printf("Processing symbol " + symbol + " i=" + i +" k="+ k);
-				double price  = iClose(symbol,aTime,1);
+				//printf("Processing symbol " + symbol + " i=" + i +" k="+ k);
+				double price  = iClose(symbol,aTime,0);
 				bool   normal = true;
 				bool   exist  = true;
 
 				if (price == 0)
 				{
 					symbol = cpairs[k]+cpairs[i]+addition;
-					price  = iClose(symbol,aTime,1);
+					price  = iClose(symbol,aTime,0);
 					normal = false;
 				}
 				if (price == 0) {
@@ -104,9 +108,9 @@ void OnTimer()
 
 				// printf("Processing symbol " + symbol  + i +" "+ k);
 
-				 double close = iClose(symbol,aTime,2);
-				 double high  = iHigh(symbol,aTime,2);
-				 double low   = iLow(symbol,aTime,2);
+				 double close = iClose(symbol,aTime,1);
+				 double high  = iHigh(symbol,aTime,1);
+				 double low   = iLow(symbol,aTime,1);
 
 
 				 //for(int l = 0; l<2; l++){
@@ -144,43 +148,137 @@ void OnTimer()
 	 string CRIs = "CRI ";
 	int min = 0;
 	int max = 0;
-	string currenciesHeader = "----------";
+	string currenciesHeader = "-------";
 	for (i = 0;   i < cpairsLen; i++){
 		if(CRI[i] < CRI[min]) min = i;
 		if(CRI[i] > CRI[max]) max = i;
 
 		CRIs = CRIs + StringFormat(";  %5d", CRI[i]);
-		CRI[i] = 0;
-		currenciesHeader +=  " " + cpairs[i] + " ---";
+		currenciesHeader +=  " " + cpairs[i] + " -";
+	}
+	
+	for (i = 0;   i < cpairsLen; i++){
+		CRI[i]  = 0;
 	}
 
 	printf(CRIs);
 	printf(currenciesHeader);
 
 	string symbol = cpairs[min]+cpairs[max]+addition;
-	double price  = iClose(symbol,aTime,1);
+	double priceCurrent  = iClose(symbol,PERIOD_M1,0);
 	bool buy = true;
-	if (price == 0)
+	if (priceCurrent == 0)
 	{
 		symbol = cpairs[max]+cpairs[min]+addition;
-		price  = iClose(symbol,aTime,1);
+		priceCurrent  = iClose(symbol,PERIOD_M1,0);
 		buy = false;
 	}
 
-	int closePrice = iOpen(lastSymbol, PERIOD_M1, 0);
+	double closePrice = iOpen(lastSymbol, PERIOD_M1, 0);
+   if(closePrice == 0){
+      string newSymbol = StringSubstr(lastSymbol, 3, 3) + StringSubstr(lastSymbol, 0, 3);; 
+      closePrice = iOpen(newSymbol, PERIOD_M5, 0);
+   }
 	printf("Closing position " + lastSymbol + " for price " + closePrice);
 	
-	string newOrder = " BUY ";
-	if(buy){
-			printf("Buying: " + symbol + " for price " + price);
+	if(!buy){
+			printf("Buying: " + symbol + " for price " + priceCurrent);
+			openPosition(symbol + "micro", 0);
 	} else {
-			printf("Selling: " + symbol + " for price " + price);
-			newOrder = " SELL ";
+			printf("Selling: " + symbol + " for price " + priceCurrent);
+			openPosition(symbol + "micro", 1);
 	}
+
 	
-	SendMail("STOP " + lastSymbol + " @ " + closePrice + newOrder + symbol + " @ " + price, " ");
+	//SendMail("STOP " + lastSymbol + " @ " + closePrice + newOrder + symbol + " @ " + price, " ");
+   trailingStop();
    
 	lastSymbol = symbol;
 	lastHour = currentHour;
+	lastH4Price = currentH4Price;
+	}
+	
+	
+	void openPosition(string symbol, int OP) {
+	   int ticket;
+      if(AccountFreeMargin()<(100*Lots))
+        {
+         Print("We have no money. Free Margin = ",AccountFreeMargin());
+         return;
+        }
+      //--- check for long position (BUY) possibility
+      if(OP == 0)
+        {
+         ticket=OrderSend(symbol,OP_BUY,Lots,Ask,3,0,0,"THMR",333,0,Green);
+         if(ticket>0)
+           {
+            if(OrderSelect(ticket,SELECT_BY_TICKET,MODE_TRADES))
+               Print("BUY order opened : ",OrderOpenPrice());
+           }
+         else
+            Print("Error opening BUY order : ",GetLastError());
+         return;
+        }
+      //--- check for short position (SELL) possibility
+      if(OP == 1)
+        {
+         ticket=OrderSend(symbol,OP_SELL,Lots,Bid,3,0,0,"THMR",333,0,Red);
+         if(ticket>0)
+           {
+            if(OrderSelect(ticket,SELECT_BY_TICKET,MODE_TRADES))
+               Print("SELL order opened : ",OrderOpenPrice());
+           }
+         else
+            Print("Error opening SELL order : ",GetLastError());
+        }
+      //--- exit from the "no opened orders" block
+      return;
+	
+	}
+	
+	void trailingStop(){
+	int total=OrdersTotal();
+	for(int cnt=0;cnt<total;cnt++)
+     {
+      if(!OrderSelect(cnt,SELECT_BY_POS,MODE_TRADES))
+         continue;
+
+         //--- long position is opened
+         if(OrderType()==OP_BUY)
+           {
+            //--- check for trailing stop
+            if(TrailingStop>0)
+              {
+               if(Bid-OrderOpenPrice()>Point*TrailingStop)
+                 {
+                  if(OrderStopLoss()<Bid-Point*TrailingStop)
+                    {
+                     //--- modify order and exit
+                     if(!OrderModify(OrderTicket(),OrderOpenPrice(),Bid-Point*TrailingStop,OrderTakeProfit(),0,Green))
+                        Print("OrderModify error ",GetLastError());
+                     return;
+                    }
+                 }
+              }
+           }
+         if(OrderType()==OP_SELL)
+           {
+            //--- check for trailing stop
+            if(TrailingStop>0)
+              {
+               if((OrderOpenPrice()-Ask)>(Point*TrailingStop))
+                 {
+                  if((OrderStopLoss()>(Ask+Point*TrailingStop)) || (OrderStopLoss()==0))
+                    {
+                     //--- modify order and exit
+                     if(!OrderModify(OrderTicket(),OrderOpenPrice(),Ask+Point*TrailingStop,OrderTakeProfit(),0,Red))
+                        Print("OrderModify error ",GetLastError());
+                     return;
+                    }
+                 }
+              }
+           }
+        }
+     
 	}
 //+------------------------------------------------------------------+
