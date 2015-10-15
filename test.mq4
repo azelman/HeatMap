@@ -74,7 +74,9 @@ void OnTick()
 void OnTimer()
 	{
 //---
-   double currentH4Price = iClose("EURUSD",aTime,0);
+   trailingStop();
+
+   double currentH4Price = iOpen("EURUSD",aTime,0);
    if(lastH4Price == currentH4Price){
       return;
    }
@@ -181,7 +183,7 @@ void OnTimer()
    }
 	printf("Closing position " + lastSymbol + " for price " + closePrice);
 	
-	if(!buy){
+	if(buy){
 			printf("Buying: " + symbol + " for price " + priceCurrent);
 			openPosition(symbol + "micro", 0);
 	} else {
@@ -191,7 +193,7 @@ void OnTimer()
 
 	
 	//SendMail("STOP " + lastSymbol + " @ " + closePrice + newOrder + symbol + " @ " + price, " ");
-   trailingStop();
+   
    
 	lastSymbol = symbol;
 	lastHour = currentHour;
@@ -240,25 +242,27 @@ void OnTimer()
 	int total=OrdersTotal();
 	for(int cnt=0;cnt<total;cnt++)
      {
-      if(!OrderSelect(cnt,SELECT_BY_POS,MODE_TRADES))
+      if(!OrderSelect(cnt,SELECT_BY_POS,MODE_TRADES)){
+         Print("OrderModify error selecting order ", cnt);
          continue;
-
+         }
+         
+         double tsPriceCurrent  = iOpen(OrderSymbol(),PERIOD_M1,0);
+         //Print("OrderModify price current ", tsPriceCurrent);
          //--- long position is opened
          if(OrderType()==OP_BUY)
            {
             //--- check for trailing stop
             if(TrailingStop>0)
               {
-               if(Bid-OrderOpenPrice()>Point*TrailingStop)
-                 {
-                  if(OrderStopLoss()<Bid-Point*TrailingStop)
+                  if(OrderStopLoss()<tsPriceCurrent-Point*TrailingStop)
                     {
                      //--- modify order and exit
-                     if(!OrderModify(OrderTicket(),OrderOpenPrice(),Bid-Point*TrailingStop,OrderTakeProfit(),0,Green))
+                     if(!OrderModify(OrderTicket(),OrderOpenPrice(),tsPriceCurrent-Point*TrailingStop,OrderOpenPrice()+Point*TakeProfit,0,Green))
                         Print("OrderModify error ",GetLastError());
                      return;
                     }
-                 }
+                 
               }
            }
          if(OrderType()==OP_SELL)
@@ -266,16 +270,14 @@ void OnTimer()
             //--- check for trailing stop
             if(TrailingStop>0)
               {
-               if((OrderOpenPrice()-Ask)>(Point*TrailingStop))
-                 {
-                  if((OrderStopLoss()>(Ask+Point*TrailingStop)) || (OrderStopLoss()==0))
+                  if((OrderStopLoss()>(tsPriceCurrent+Point*TrailingStop)) || (OrderStopLoss()==0))
                     {
                      //--- modify order and exit
-                     if(!OrderModify(OrderTicket(),OrderOpenPrice(),Ask+Point*TrailingStop,OrderTakeProfit(),0,Red))
+                     if(!OrderModify(OrderTicket(),OrderOpenPrice(),tsPriceCurrent+Point*TrailingStop,OrderOpenPrice()-Point*TakeProfit,0,Red))
                         Print("OrderModify error ",GetLastError());
                      return;
                     }
-                 }
+                 
               }
            }
         }
