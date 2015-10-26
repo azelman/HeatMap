@@ -1,0 +1,79 @@
+//+------------------------------------------------------------------+
+//| script program start function                                    |
+//+------------------------------------------------------------------+
+#include <stderror.mqh>
+#include <stdlib.mqh>
+   
+extern int length = 120;
+int p, n, TotalSymbols, MAX=0;
+
+#property indicator_chart_window
+
+int init()
+{
+   //nameData = Symbol()+".csv";         // name of the data file to be sent
+   return(0);
+}
+
+void start() 
+{
+   static int old_bars = 0;   // remember the amount of bars already known   
+   if (old_bars != Bars)      // if a new bar is received 
+   {
+      TotalSymbols=FindSymbols();                             // write the data file                              
+   }      
+   old_bars = Bars;              // remember how many bars are known
+   return(0);  
+}
+
+int FindSymbols() 
+{
+  int    handle, i, r, TotalRecords;
+  string fname, Sy, descr;
+  //----->
+  fname = "symbols.raw";
+  handle=FileOpenHistory(fname, FILE_BIN | FILE_READ);
+  if(handle<1)
+    {
+     Print("HTML Report generator - Unable to open file"+fname+", the last error is: ", GetLastError());
+     return(false);
+    }  
+  TotalRecords=FileSize(handle) / 1936;
+  
+    
+  for(i=0; i<TotalRecords; i++) 
+  {
+    Sy=FileReadString(handle, 12);
+    descr=FileReadString(handle, 75);
+    FileSeek(handle, 1849, SEEK_CUR); // goto the next record
+     
+    write_data(Sy);
+  }
+ 
+  FileClose(handle);
+  return(TotalRecords);
+}
+
+void write_data(string symbol)
+{
+  int handle;
+  string filename = symbol + ".txt";
+  handle = FileOpen(filename, FILE_CSV|FILE_WRITE,';');
+  if(handle < 1)
+  {
+    Comment("Creation of "+filename+" failed. Error #", GetLastError());
+    return(0);
+  }
+ 
+  FileWrite(handle, "DATE","TIME","HIGH","LOW","CLOSE","OPEN","VOLUME");   // heading
+  int i;
+  for (i=length-1; i>=0; i--)
+  {
+    FileWrite(handle, TimeToStr(Time[i], TIME_DATE), TimeToStr(Time[i], TIME_SECONDS),
+                      iHigh(symbol,0, i), iLow(symbol, 0, i), iClose(symbol, 0, i), iOpen(symbol, 0, i), iVolume(symbol, 0, i));
+  }
+  FileClose(handle);
+  Comment("File "+filename+" has been created. "+TimeToStr(TimeCurrent(), TIME_SECONDS) );
+  return(0);
+}  
+//+------------------------------------------------------------------+
